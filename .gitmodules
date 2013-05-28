@@ -4,3 +4,9 @@
 [submodule "mavlink"]
 	path = mavlink
 	url = git://github.com/mavlink/mavlink.git
+[submodule "fc"]
+	path = fc
+	url = git://github.com/piface/pifacedigitalio.git
+[submodule "fc/piface"]
+	path = fc/piface
+	url = git://github.com/piface/pifacedigitalio.git

@@ -13,3 +13,6 @@
 [submodule "fc/h100"]
 	path = fc/h100
 	url = https://github.com/howroyd/h100.git
+[submodule "h100"]
+	path = h100
+	url = https://github.com/howroyd/h100.git

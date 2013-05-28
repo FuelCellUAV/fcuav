@@ -6,24 +6,61 @@ from   time import time
 import piface.pfio as pfio
 import RPi.GPIO as GPIO
 import smbus
+import argparse
 
-# Define global constants
-BLUE      = 0x4a
-EARTH     = 0x49
-RED       = 0x48
-YELLOW    = 0x4b
-h2Pin     = 0 # Relay
-fanPin    = 1 # Relay
-purgePin  = 2
-buttonOn  = 0
-buttonOff = 1
-buttonReset = 2
-purgeFreq = 3 # Seconds
-purgeTime = 0.5 # Seconds
-startTime = 5
-stopTime  = 5
-cutoff    = 25.0 # degC
+# Define default global constants
+parser = argparse.ArgumentParser(description='Fuel Cell Controller by Simon Howroyd 2013')
+parser.add_argument('--out'	   , nargs=1, help='Name of the output logfile')
+parser.add_argument('--BLUE'       , nargs=1, type=float, default=0x4a,	help='I2C address')
+parser.add_argument('--EARTH'      , nargs=1, type=float, default=0x49, help='I2C address')
+parser.add_argument('--RED'        , nargs=1, type=float, default=0x48, help='I2C address')
+parser.add_argument('--YELLOW'     , nargs=1, type=float, default=0x4b, help='I2C address')
+parser.add_argument('--h2Pin'      , nargs=1, type=float, default=0,	help='H2 supply relay') # Relay
+parser.add_argument('--fanPin'     , nargs=1, type=float, default=1,    help='Fan relay') 	# Relay
+parser.add_argument('--purgePin'   , nargs=1, type=float, default=2,    help='Purge switch')
+parser.add_argument('--buttonOn'   , nargs=1, type=float, default=0,    help='On button')
+parser.add_argument('--buttonOff'  , nargs=1, type=float, default=1,    help='Off button')
+parser.add_argument('--buttonReset', nargs=1, type=float, default=2,    help='Reset button')
+parser.add_argument('purgeFreq'  , nargs='?', type=float, default=3, 	help='How often to purge in seconds')
+parser.add_argument('purgeTime'  , nargs='?', type=float, default=0.5,	help='How long to purge for in seconds')
+parser.add_argument('startTime'  , nargs='?', type=float, default=5,	help='Duration of the startup routine')
+parser.add_argument('stopTime'   , nargs='?', type=float, default=5,	help='Duration of the shutdown routine')
+parser.add_argument('cutoff'     , nargs='?', type=float, default=25.0,	help='Temperature cutoff in celcius')
+args = parser.parse_args()
 
+# Class to save to file & print to screen
+class MyWriter:
+    def __init__(self, stdout, filename):
+        self.stdout = stdout
+        self.logfile = file(filename, 'a')
+    def write(self, text):
+        self.stdout.write(text)
+        self.logfile.write(text)
+    def close(self):
+        self.stdout.close()
+        self.logfile.close()
+
+# Look at user arguments
+if args.out: # save to output file
+        writer = MyWriter(sys.stdout, args.out)
+	sys.stdout = writer
+BLUE 	    = args.BLUE
+EARTH 	    = args.EARTH
+RED 	    = args.RED
+YELLOW 	    = args.YELLOW
+h2Pin 	    = args.h2Pin
+fanPin 	    = args.fanPin
+purgePin    = args.purgePin
+buttonOn    = args.buttonOn
+buttonOff   = args.buttonOff
+buttonReset = args.buttonReset
+purgeFreq   = args.purgeFreq
+purgeTime   = args.purgeTime
+startTime   = args.startTime
+stopTime    = args.stopTime
+cutoff 	    = args.cutoff
+
+# State machine cases
 class STATE:
 	startup, on, shutdown, off, error = range(5)
 
@@ -99,14 +136,13 @@ print("Horizon H-100 Stack")
 print("(c) Simon Howroyd 2013")
 print("Loughborough University\n")
 
-
 # Main
 while (True):
 
     # TEMP SHUTDOWN
     if blue() >= cutoff or earth() >= cutoff or red() >= cutoff or yellow() >= cutoff:
-	print 'Too hot! (cutoff={} degC)'.format(cutoff)
-	print '\tBlue={0}, Earth={1}, Red={2}, Yellow={3}.'.format(blue(),earth(),red(),yellow())
+	print '\rToo hot! (cutoff={} degC)'.format(cutoff),
+	print '\tBlue={0}\tEarth={1}\tRed={2}\tYellow={3}'.format(blue(),earth(),red(),yellow()),
 	state = STATE.error
 
     # STOP BUTTON
@@ -162,19 +198,17 @@ while (True):
             state = STATE.error
     if state == STATE.error:
         # Error lock
-        while (True):
-	    # Reset button
-	    if pfio.digital_read(buttonReset) == True:
-		state = STATE.off
-                print("Resetting")
-		break
+        if pfio.digital_read(buttonReset) == True:
+  	    # Reset button
+	    state = STATE.off
+            print("\nResetting")
             
-	    h2.switch(False)
-            purge.switch(False)
-            if blue() >= cutoff or earth() >= cutoff or red() >= cutoff or yellow() >= cutoff:
-		fan.switch(True)
-	    else:
-		fan.switch(False)
+	h2.switch(False)
+        purge.switch(False)
+        if blue() >= cutoff or earth() >= cutoff or red() >= cutoff or yellow() >= cutoff:
+	    fan.switch(True)
+	else:
+	    fan.switch(False)
 
     ## end STATE MACHINE ##
 # end main

@@ -10,3 +10,6 @@
 [submodule "fc/piface"]
 	path = fc/piface
 	url = git://github.com/piface/pifacedigitalio.git
+[submodule "fc/h100"]
+	path = fc/h100
+	url = https://github.com/howroyd/h100.git

@@ -2,16 +2,16 @@
 
 # Import libraries
 import sys
-from time import time
+from   time import time
 import piface.pfio as pfio
 import RPi.GPIO as GPIO
 import smbus
 
 # Define global constants
-BLUE      =  0x4a
-EARTH     =	0x49
-RED       =	0x48
-YELLOW    =	0x4b
+BLUE      = 0x4a
+EARTH     = 0x49
+RED       = 0x48
+YELLOW    = 0x4b
 h2Pin     = 0 # Relay
 fanPin    = 1 # Relay
 purgePin  = 2
@@ -21,7 +21,7 @@ purgeFreq = 3 # Seconds
 purgeTime = 0.5 # Seconds
 startTime = 3
 stopTime  = 3
-cutoff    = 25 # degC
+cutoff    = 25.0 # degC
 
 class STATE:
 	startup, on, shutdown, off, error = range(5)
@@ -31,30 +31,40 @@ class Switch:
 	pin   = 0
 	state = False
 	lastTime = 0
+	lastOff= 0
 	
 	def __init__(self, pin):
 		self.pin = pin
-		self.lastTime = time()
 		
 	def timed(self, freq, duration):
-		delta = time() - self.lastTime
-		
 		# Deactivate if time is up
-		if delta >= duration && self.state == True:
-			self.state = False
-			self.lastTime = time()
+		if (time()-self.lastTime) >= duration and self.state == True:
+		    print 'turning off {0}. delta={1}'.format(self.pin,time()-self.lastTime)
+		    self.lastTime = time()
+		    self.state = False
+		    return self.write()
+
 		# Activate
-		elif delta >= freq && self.state == False:
-			self.state = True
-			self.lastTime = time()
-		
-		pfio.digital_write(self.pin,self.state)
-		
-		return self.state
+		if (time()-self.lastTime) >= freq and self.state == False:
+		    print 'turning on {0}. delta={1}'.format(self.pin,time()-self.lastTime)
+		    self.lastTime = time()
+		    self.state = True
+		    return self.write()
+
 		
 	def switch(self, state):
 		self.state = state
-		pfio.digital_write(self.pin,self.state)
+		return self.write()
+
+	def resetTimers(self):
+		self.lastTime = time()
+
+	def write(self):
+		try:
+		    pfio.digital_write(self.pin,self.state)
+		except Exception as e:
+    		    print ("Timer digital write error")
+                
 		return self.state
 
 # Class to read I2c TMP102 Temperature Sensor
@@ -72,7 +82,7 @@ class I2cTemp:
 		   temp = ((( msb * 256 ) + lsb) >> 4 ) * 0.0625
 		   return temp
 		except Exception as e:
-           print ("I2C Error")
+           	   print ("I2C Error")
 		   return -1
 
 # Define class instances
@@ -98,80 +108,68 @@ print("Loughborough University\n")
 # Main
 while (True):
 
-	# TEMP SHUTDOWN
-	blue() ; earth() ; red() ; yellow()
-	if blue >= cutoff or earth >= cutoff or red >= cutoff or yellow >= cutoff:
-		print ("Too hot!")
-		state = STATE.error
+    # TEMP SHUTDOWN
+    if blue() >= cutoff or earth() >= cutoff or red() >= cutoff or yellow() >= cutoff:
+	print 'Too hot! (cutoff={} degC)'.format(cutoff)
+	print '\tBlue={0}, Earth={1}, Red={2}, Yellow={3}.'.format(blue(),earth(),red(),yellow())
+	state = STATE.error
 
     # STOP BUTTON
     if pfio.digital_read(buttonOn) == False and pfio.digital_read(buttonOff) == True:
-        if state == 1 or state == 2:
-            state = 3
+        if state == STATE.startup or state == STATE.on:
+            state = STATE.shutdown
             timeChange = time()
-            h2.stop()
-            fan.stop()
-            purge.stop()
             print ("Shutting down")
 
     ## STATE MACHINE ##
-    if state == 0:
+    if state == STATE.off:
         # Off
-        h2.stop()
-        fan.stop()
-        purge.stop()
+        h2.switch(False)
+        fan.switch(False)
+        purge.switch(False)
 
         if pfio.digital_read(buttonOn) == True and pfio.digital_read(buttonOff) == False:
-             state = 1
-             timeChange = time()
-             h2.resetTimers()
-             fan.resetTimers()
-             purge.resetTimers()
-             print ("Starting")
-    if state == 1:
+	    state = STATE.startup
+            timeChange = time()
+            print ("Starting")
+    if state == STATE.startup:
         # Startup
         try:
-            h2(startTime,startTime)
-            fan(startTime,startTime)
-            purge(startTime,startTime)
+	    h2.timed(0,startTime)
+            fan.timed(0,startTime)
+            purge.timed(0,startTime)
             if (time() - timeChange) > startTime:
-                state = 2
-                h2.resetTimers()
-                fan.resetTimers()
-                purge.resetTimers()
+                state = STATE.on
                 print ("Running")
         except Exception as e:
             print ("Startup Error")
-            state = 4
-    if state == 2:
+            state = STATE.error
+    if state == STATE.on:
         # Running
         try:
-            h2()
-            fan()
-            purge(purgeFreq,purgeTime)
+            h2.switch(True)
+            fan.switch(True)
+            purge.timed(purgeFreq,purgeTime)
         except Exception as e:
             print ("Running Error")
-            state = 4
-    if state == 3:
+            state = STATE.error
+    if state == STATE.shutdown:
         # Shutdown
         try:
-            h2.stop()
-            fan(stopTime,stopTime)
-            purge(stopTime,stopTime)
+            h2.switch(False)
+            fan.timed(0,stopTime)
+            purge.timed(0,stopTime)
             if (time() - timeChange) > stopTime:
-                state = 0
-                h2.resetTimers()
-                fan.resetTimers()
-                purge.resetTimers()
+                state = STATE.off
                 print("Stopped")
         except Exception as e:
             print ("Shutdown Error")
-            state = 4
-    if state == 4:
+            state = STATE.error
+    if state == STATE.error:
         # Error lock
         while (True):
-            h2.stop()
-            fan.stop()
-            purge.stop()
+            h2.switch(False)
+            fan.switch(False)
+            purge.switch(False)
     ## end STATE MACHINE ##
 # end main

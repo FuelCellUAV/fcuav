@@ -17,10 +17,11 @@ fanPin    = 1 # Relay
 purgePin  = 2
 buttonOn  = 0
 buttonOff = 1
+buttonReset = 2
 purgeFreq = 3 # Seconds
 purgeTime = 0.5 # Seconds
-startTime = 3
-stopTime  = 3
+startTime = 5
+stopTime  = 5
 cutoff    = 25.0 # degC
 
 class STATE:
@@ -162,8 +163,18 @@ while (True):
     if state == STATE.error:
         # Error lock
         while (True):
-            h2.switch(False)
-            fan.switch(False)
+	    # Reset button
+	    if pfio.digital_read(buttonReset) == True:
+		state = STATE.off
+                print("Resetting")
+		break
+            
+	    h2.switch(False)
             purge.switch(False)
+            if blue() >= cutoff or earth() >= cutoff or red() >= cutoff or yellow() >= cutoff:
+		fan.switch(True)
+	    else:
+		fan.switch(False)
+
     ## end STATE MACHINE ##
 # end main

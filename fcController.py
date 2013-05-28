@@ -39,25 +39,19 @@ class Switch:
 	def timed(self, freq, duration):
 		# Deactivate if time is up
 		if (time()-self.lastTime) >= duration and self.state == True:
-		    print 'turning off {0}. delta={1}'.format(self.pin,time()-self.lastTime)
 		    self.lastTime = time()
 		    self.state = False
 		    return self.write()
 
 		# Activate
 		if (time()-self.lastTime) >= freq and self.state == False:
-		    print 'turning on {0}. delta={1}'.format(self.pin,time()-self.lastTime)
 		    self.lastTime = time()
 		    self.state = True
 		    return self.write()
 
-		
 	def switch(self, state):
 		self.state = state
 		return self.write()
-
-	def resetTimers(self):
-		self.lastTime = time()
 
 	def write(self):
 		try:
